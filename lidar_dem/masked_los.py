@@ -3,9 +3,12 @@ from rasterio.plot import show
 import matplotlib.pyplot as plt
 import numpy as np
 import math
+from time import perf_counter
+
+t1_start = perf_counter() 
 
 # Open the sample DEM TIFF file
-dem_data = rasterio.open(r"tmb1.tif")
+dem_data = rasterio.open(r"tmb_big.tif")
 dem_array = dem_data.read(1)
 transform = dem_data.transform
 
@@ -20,22 +23,6 @@ transmitter_y = (bounds.bottom + bounds.top) / 2
 inv_transform = ~transform
 transmitter_x, transmitter_y = [
     int(round(coord)) for coord in inv_transform * (transmitter_x, transmitter_y)]
-
-# Check if the transformed coordinates are within bounds
-if not (0 <= transmitter_x < shape[1] and 0 <= transmitter_y < shape[0]):
-    raise ValueError(f"Transmitter coordinates ({transmitter_x}, {transmitter_y}) are out of bounds")
-
-# Define the integer to add to the current z value
-z_increment = 30 
-
-# Retrieve the current z value at the transmitter's location
-current_z_value = dem_array[transmitter_y, transmitter_x]
-
-# Calculate the new z value for the transmitter
-transmitter_z = current_z_value + z_increment
-
-# Assign the new z value to the transmitter's location in the DEM array
-dem_array[transmitter_y, transmitter_x] = transmitter_z
 
 def is_visible(dem_array, x1, y1, x2, y2):
     """Determine if the point (x2, y2) is visible from (x1, y1) in dem_array."""
@@ -55,7 +42,7 @@ def is_visible(dem_array, x1, y1, x2, y2):
     x = x1
     y = y1
 
-    z = dem_array[int(y1), int(x1)] + 20
+    z = dem_array[int(y1), int(x1)] + 30
 
     for i in range(1, int(steps)):
         x += x_inc
@@ -103,22 +90,21 @@ print(f"radius pixels {radius_pixels}")
 y_indices, x_indices = np.ogrid[:dem_array.shape[0], :dem_array.shape[1]]
 distance_from_center = np.sqrt((x_indices - transmitter_x)**2 + (y_indices - transmitter_y)**2)
 circle_mask = distance_from_center <= radius_pixels
-print(circle_mask)
+# print(circle_mask)
 
 # Apply the mask to the visibility array
 masked_visibility_array = np.where(circle_mask, visibility_array, 0)
-print(masked_visibility_array)
+# print(masked_visibility_array)
 
 num_visible_pixels = np.sum(masked_visibility_array == 1)
-num_non_visible_pixels = np.sum(masked_visibility_array == 0)
 total_pixels_inside_circle = np.sum(circle_mask)
 
 print(f"Number of visible pixels (value = 1) inside the circle: {num_visible_pixels}")
-print(f"Number of non-visible pixels (value = 0) inside the circle: {num_non_visible_pixels}")
 print(f"Total number of pixels inside the circle: {total_pixels_inside_circle}")
 
 pixel_area = pixel_size_x_m * pixel_size_y_m
 total_area = total_pixels_inside_circle * pixel_area
+
 visible_area = num_visible_pixels * pixel_area
 visibility_percentage = (visible_area / total_area) * 100
 
@@ -152,8 +138,8 @@ plt.gca().add_patch(circle)
 plt.xlim(0, dem_array.shape[1])
 plt.ylim(dem_array.shape[0], 0)  # Inverted y-axis for correct display
 
-# plt.imshow(visibility_array, cmap='gray')
-# plt.contour(circle_mask, colors='red')
-# plt.title('Visibility Array with Circle Mask')
+t1_stop = perf_counter()
+print(f"Elapsed time:, {t1_stop-t1_start}")
 
 plt.show()
+
