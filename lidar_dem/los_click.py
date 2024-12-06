@@ -18,6 +18,7 @@ pixel_size_y_deg = -transform[4]  # Negative because the y-coordinate decreases 
 
 # Assuming the DEM is centered around a specific latitude
 center_lat = (bounds.top + bounds.bottom) / 2
+center_long = (bounds.left + bounds.right) / 2
 
 # Convert pixel size from degrees to meters
 meters_per_degree_lat = 111000  # Approximate value

@@ -1,5 +1,4 @@
 import numpy as np
 
-
-steps = max(abs(5), abs(15))
-print(steps)
+test = 'BCE67C754493'
+print(len(test))

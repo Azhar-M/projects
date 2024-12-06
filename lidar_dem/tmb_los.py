@@ -5,7 +5,7 @@ import numpy as np
 import math
 
 # Open the sample DEM TIFF file
-dem_data = rasterio.open(r"tmb1.tif")
+dem_data = rasterio.open(r"C:\Users\User\Documents\azhar_local_code\ikeja\tiff\tmb1.tif")
 dem_array = dem_data.read(1)
 transform = dem_data.transform
 
