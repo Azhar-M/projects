@@ -3,10 +3,6 @@ import laspy
 import sqlite3
 from pyproj import Transformer  
 
-import matplotlib.pyplot as plt
-import laspy
-import sqlite3
-from pyproj import Transformer
 
 # Function to convert coordinates to Lon/Lat
 def run(left, bottom, right, top, crs_from="EPSG:32735", crs_to="EPSG:4326"):
@@ -15,6 +11,7 @@ def run(left, bottom, right, top, crs_from="EPSG:32735", crs_to="EPSG:4326"):
     top_right = transformer.transform(right, top)
     bottom_right = transformer.transform(right, bottom)
     bottom_left = transformer.transform(left, bottom)
+
     return {
         "top_left": {"lng": top_left[0], "lat": top_left[1]},
         "top_right": {"lng": top_right[0], "lat": top_right[1]},
@@ -22,9 +19,26 @@ def run(left, bottom, right, top, crs_from="EPSG:32735", crs_to="EPSG:4326"):
         "bottom_left": {"lng": bottom_left[0], "lat": bottom_left[1]}
     }
 
+
 # Initialize SQLite database connection
 con = sqlite3.connect('bbox_grid.db')
 cur = con.cursor()
+
+ref_db_path = f'C:\\Users\\User\\Documents\\azhar_local_code\\ikeja\\projects\\sqlite_bbox\\reference_table\\bbox_reference.db'
+ref_con = sqlite3.connect(ref_db_path)
+ref_cur = ref_con.cursor()
+
+cmd_rfrnce = '''
+                CREATE TABLE IF NOT EXISTS reference_table (
+                    min_x REAL,
+                    max_x REAL,
+                    min_y REAL,
+                    max_y REAL,
+                    f_path TEXT
+                );
+            '''
+ref_cur.execute(cmd_rfrnce)
+ref_con.commit()
 
 # Path to your LAS file
 las_file_path = r"C:\Users\User\Downloads\TB-01-Pointcloud(UTM35S-thinned)\TB-01-Pointcloud(UTM35S-thinned).las"
@@ -63,22 +77,31 @@ while x_start < x_max:
         }
         tiles.append(tile)
 
+        min_x = tile_coords['bottom_left']['lng']
+        max_x = tile_coords['top_right']['lng']
+        min_y = tile_coords['bottom_left']['lat']
+        max_y = tile_coords['top_right']['lat']
+
+        # Initialize SQLite database connection
+        db_path = f'C:\\Users\\User\\Documents\\azhar_local_code\\ikeja\\projects\\sqlite_bbox\\bbox_grid_{bbox_id}.db'
+        con = sqlite3.connect(db_path)
+        cur = con.cursor()
 
         # Create a table dynamically for each bbox_id
-        table_name = f"bbox_{bbox_id}"
-        cmd_create_table = f'''
-            CREATE TABLE IF NOT EXISTS {table_name} (
+        bbox_table_name = f"bbox"
+        cmd_bbox_table = f'''
+            CREATE TABLE IF NOT EXISTS {bbox_table_name} (
                 top_left_x REAL, top_left_y REAL,
                 top_right_x REAL, top_right_y REAL,
                 bottom_right_x REAL, bottom_right_y REAL,
                 bottom_left_x REAL, bottom_left_y REAL
             );
         '''
-        cur.execute(cmd_create_table)
+        cur.execute(cmd_bbox_table)
 
         # Insert the converted coordinates into the table
-        cmd_insert = f'''
-            INSERT or REPLACE INTO {table_name} (
+        cmd_insert_bbox = f'''
+            INSERT or REPLACE INTO {bbox_table_name} (
                 top_left_x, top_left_y,
                 top_right_x, top_right_y,
                 bottom_right_x, bottom_right_y,
@@ -91,10 +114,34 @@ while x_start < x_max:
             tile_coords["bottom_right"]["lng"], tile_coords["bottom_right"]["lat"],
             tile_coords["bottom_left"]["lng"], tile_coords["bottom_left"]["lat"]
         )
-        cur.execute(cmd_insert, sql_params)
+        cur.execute(cmd_insert_bbox, sql_params)
         con.commit()
 
-        print(f"Inserted tile {bbox_id} into table {table_name}")
+        print(f"Inserted tile {bbox_id} into table {bbox_table_name}")
+
+        points_table_name = f"points"
+
+        cmd_points = '''
+                    CREATE TABLE IF NOT EXISTS points (
+                                x_m REAL,
+                                y_m REAL, 
+                                z_m REAL,
+                                lon REAL,
+                                lat REAL,
+                                PRIMARY KEY (x_m, y_m)
+                                );
+                        '''
+        cur.execute(cmd_points)
+        con.commit()
+
+        cmd_ref = '''
+                    INSERT or REPLACE INTO reference_table (min_x, max_x, min_y, max_y, f_path)
+                    VALUES (?, ?, ?, ?, ?);
+                '''
+        sql_ref_params = (min_x, max_x, min_y, max_y, db_path)
+
+        ref_cur.execute(cmd_ref, sql_ref_params)
+        ref_con.commit()
 
         bbox_id += 1
         y_start -= (tile_size - overlap)
@@ -105,49 +152,49 @@ while x_start < x_max:
 con.close()
 # Plot all the tiles
 
-con = sqlite3.connect('bbox_grid.db')
-cur = con.cursor()
+# con = sqlite3.connect('bbox_grid.db')
+# cur = con.cursor()
 
-plt.figure(figsize=(12, 12))
+# plt.figure(figsize=(12, 12))
 
-# Loop over all bbox tables and plot their coordinates
-for bbox_id in range(1, bbox_id):  # Assuming bbox_id incremented till the last tile
-    table_name = f"bbox_{bbox_id}"
+# # Loop over all bbox tables and plot their coordinates
+# for bbox_id in range(1, bbox_id):  # Assuming bbox_id incremented till the last tile
+#     bbox_table_name = f"bbox_{bbox_id}"
 
-    # Fetch the tile coordinates from the table
-    cur.execute(f'''
-        SELECT 
-            top_left_x, top_left_y, 
-            top_right_x, top_right_y, 
-            bottom_right_x, bottom_right_y, 
-            bottom_left_x, bottom_left_y 
-        FROM {table_name};
-    ''')
-    row = cur.fetchone()
+#     # Fetch the tile coordinates from the table
+#     cur.execute(f'''
+#         SELECT 
+#             top_left_x, top_left_y, 
+#             top_right_x, top_right_y, 
+#             bottom_right_x, bottom_right_y, 
+#             bottom_left_x, bottom_left_y 
+#         FROM {bbox_table_name};
+#     ''')
+#     row = cur.fetchone()
 
-    if row:
-        # Extract the coordinates
-        top_left = (row[0], row[1])
-        top_right = (row[2], row[3])
-        bottom_right = (row[4], row[5])
-        bottom_left = (row[6], row[7])
+#     if row:
+#         # Extract the coordinates
+#         top_left = (row[0], row[1])
+#         top_right = (row[2], row[3])
+#         bottom_right = (row[4], row[5])
+#         bottom_left = (row[6], row[7])
 
-        # Define the X and Y coordinates for plotting
-        x_coords = [top_left[0], top_right[0], bottom_right[0], bottom_left[0], top_left[0]]
-        y_coords = [top_left[1], top_right[1], bottom_right[1], bottom_left[1], top_left[1]]
+#         # Define the X and Y coordinates for plotting
+#         x_coords = [top_left[0], top_right[0], bottom_right[0], bottom_left[0], top_left[0]]
+#         y_coords = [top_left[1], top_right[1], bottom_right[1], bottom_left[1], top_left[1]]
 
-        # Plot the tile perimeter
-        plt.plot(x_coords, y_coords, 'b-', alpha=0.6)
+#         # Plot the tile perimeter
+#         plt.plot(x_coords, y_coords, 'b-', alpha=0.6)
 
-# Plot details
-plt.title("Tiles in Longitude/Latitude (CRS Converted Grid)")
-plt.xlabel("Longitude")
-plt.ylabel("Latitude")
-plt.grid(True)
-plt.axis('equal')  # Ensure equal scaling for lon/lat
-plt.show()
+# # Plot details
+# plt.title("Tiles in Longitude/Latitude (CRS Converted Grid)")
+# plt.xlabel("Longitude")
+# plt.ylabel("Latitude")
+# plt.grid(True)
+# plt.axis('equal')  # Ensure equal scaling for lon/lat
+# plt.show()
 
-con.close()
+# con.close()
 
 # plt.figure(figsize=(12, 12))
 
